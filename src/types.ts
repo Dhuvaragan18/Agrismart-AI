@@ -11,6 +11,8 @@ export interface DiseaseResult {
   };
   timestamp: number;
   imageUrl?: string;
+  userId?: string;
+  cropType?: string;
 }
 
 export interface WeatherData {
@@ -30,6 +32,17 @@ export interface FarmingPlan {
   watering: string;
   fertilizer: string;
   harvest: string;
+}
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  location: string;
+  crops: string[];
+  farmSize?: string;
+  joinedDate: string;
 }
 
 export type Language = "en" | "ta";

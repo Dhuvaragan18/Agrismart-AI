@@ -1,17 +1,37 @@
 import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Upload, Camera, Loader2, CheckCircle2, AlertCircle, Info, Leaf, Droplets, ShieldCheck, FlaskConical, History as HistoryIcon } from "lucide-react";
+import { 
+  Upload, 
+  Camera, 
+  Loader2, 
+  CheckCircle2, 
+  AlertCircle, 
+  Info, 
+  Leaf, 
+  ShieldCheck, 
+  FlaskConical, 
+  Sparkles,
+  RefreshCw,
+  Eye,
+  Check
+} from "lucide-react";
 import { detectDisease } from "../services/gemini";
 import { DiseaseResult, Language } from "../types";
 import { TRANSLATIONS } from "../constants";
 import { cn } from "../lib/utils";
+import { useAuth } from "../context/AuthContext";
+import CameraModal from "../components/CameraModal";
+import { generateSampleLeaf } from "../lib/sampleLeaves";
 
 export default function DiseaseDetection({ language }: { language: Language }) {
   const [image, setImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<DiseaseResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { user } = useAuth();
   const t = TRANSLATIONS[language];
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -27,6 +47,21 @@ export default function DiseaseDetection({ language }: { language: Language }) {
     reader.readAsDataURL(file);
   };
 
+  const handleCameraCapture = (capturedBase64: string) => {
+    setImage(capturedBase64);
+    setResult(null);
+    setError(null);
+  };
+
+  const loadSample = (type: "tomato" | "paddy" | "corn") => {
+    const sampleDataUrl = generateSampleLeaf(type);
+    if (sampleDataUrl) {
+      setImage(sampleDataUrl);
+      setResult(null);
+      setError(null);
+    }
+  };
+
   const handleAnalyze = async () => {
     if (!image) return;
     setLoading(true);
@@ -36,12 +71,17 @@ export default function DiseaseDetection({ language }: { language: Language }) {
       const data = await detectDisease(image);
       setResult(data);
       
-      // Save to history
-      const history = JSON.parse(localStorage.getItem("agri_history") || "[]");
-      localStorage.setItem("agri_history", JSON.stringify([{ ...data, imageUrl: image }, ...history].slice(0, 20)));
-    } catch (err) {
+      // Save to history with user info
+      const history: DiseaseResult[] = JSON.parse(localStorage.getItem("agri_history") || "[]");
+      const recordToSave: DiseaseResult = {
+        ...data,
+        imageUrl: image,
+        userId: user?.id,
+      };
+      localStorage.setItem("agri_history", JSON.stringify([recordToSave, ...history].slice(0, 30)));
+    } catch (err: any) {
       console.error(err);
-      setError("Failed to analyze image. Please try again.");
+      setError(err?.message || "Failed to analyze image. Please ensure leaf is clearly visible and try again.");
     } finally {
       setLoading(false);
     }
@@ -57,56 +97,131 @@ export default function DiseaseDetection({ language }: { language: Language }) {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-12">
-      <div className="text-center space-y-4">
-        <h1 className="text-4xl font-bold text-[#5A5A40]">{t.detectDisease}</h1>
-        <p className="text-[#1A1A1A]/60">{t.uploadImage}</p>
+    <div className="max-w-4xl mx-auto space-y-10">
+      {/* Title Header */}
+      <div className="text-center space-y-3">
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#5A5A40]/10 text-[#5A5A40] text-xs font-bold uppercase tracking-wider">
+          <Sparkles size={14} /> AI Plant Pathology
+        </div>
+        <h1 className="text-3xl sm:text-5xl font-bold text-[#5A5A40] tracking-tight">{t.detectDisease}</h1>
+        <p className="text-sm sm:text-base text-[#1A1A1A]/60 max-w-xl mx-auto">
+          Capture or upload a leaf photo. Our deep vision model detects infections, assesses severity, and prescribes treatments.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {/* Upload Section */}
+        {/* Input / Capture Section */}
         <div className="space-y-6">
+          {/* Main Visual Box */}
           <div 
-            onClick={() => fileInputRef.current?.click()}
             className={cn(
-              "relative aspect-square rounded-[2.5rem] border-4 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all overflow-hidden",
-              image ? "border-[#5A5A40]/40 bg-white" : "border-[#5A5A40]/20 bg-[#5A5A40]/5 hover:bg-[#5A5A40]/10"
+              "relative aspect-square rounded-[2.5rem] border-3 border-dashed flex flex-col items-center justify-center transition-all overflow-hidden bg-white shadow-sm",
+              image ? "border-[#5A5A40]/40" : "border-[#5A5A40]/25 hover:border-[#5A5A40]/50"
             )}
           >
             {image ? (
-              <img src={image} alt="Preview" className="w-full h-full object-cover" />
-            ) : (
-              <div className="text-center p-8 space-y-4">
-                <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center mx-auto text-[#5A5A40] shadow-sm">
-                  <Upload size={32} />
+              <div className="relative w-full h-full group">
+                <img src={image} alt="Infected leaf preview" className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                  <button
+                    onClick={() => setIsCameraOpen(true)}
+                    className="p-3 bg-white text-[#5A5A40] rounded-2xl font-bold text-xs flex items-center gap-1.5 shadow-lg"
+                  >
+                    <Camera size={16} /> Retake
+                  </button>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-3 bg-white text-[#5A5A40] rounded-2xl font-bold text-xs flex items-center gap-1.5 shadow-lg"
+                  >
+                    <Upload size={16} /> Change
+                  </button>
                 </div>
-                <div>
-                  <p className="font-bold text-[#5A5A40]">{t.dragDrop}</p>
-                  <p className="text-xs text-[#1A1A1A]/40 mt-1">Supports JPG, PNG (Max 5MB)</p>
+              </div>
+            ) : (
+              <div className="text-center p-6 space-y-5">
+                <div className="flex items-center justify-center gap-3">
+                  <div className="w-16 h-16 bg-[#5A5A40]/10 text-[#5A5A40] rounded-3xl flex items-center justify-center shadow-inner">
+                    <Camera size={28} />
+                  </div>
+                  <div className="w-16 h-16 bg-[#5A5A40]/10 text-[#5A5A40] rounded-3xl flex items-center justify-center shadow-inner">
+                    <Upload size={28} />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <h3 className="font-bold text-base text-[#1A1A1A]">{t.uploadImage}</h3>
+                  <p className="text-xs text-[#1A1A1A]/50">Use live camera or pick leaf image</p>
+                </div>
+
+                {/* Direct Action Buttons inside box */}
+                <div className="flex flex-col sm:flex-row gap-2.5 pt-2 max-w-xs mx-auto">
+                  <button
+                    type="button"
+                    onClick={() => setIsCameraOpen(true)}
+                    className="flex-1 py-3 px-4 rounded-xl bg-[#5A5A40] text-white font-bold text-xs flex items-center justify-center gap-2 hover:bg-[#4A4A30] transition-colors shadow-md shadow-[#5A5A40]/20"
+                  >
+                    <Camera size={16} />
+                    {t.openCamera}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex-1 py-3 px-4 rounded-xl bg-[#5A5A40]/10 text-[#5A5A40] font-bold text-xs flex items-center justify-center gap-2 hover:bg-[#5A5A40]/15 transition-colors"
+                  >
+                    <Upload size={16} />
+                    Upload
+                  </button>
                 </div>
               </div>
             )}
+
+            {/* Hidden File Input */}
             <input 
               type="file" 
               ref={fileInputRef} 
               onChange={handleImageUpload} 
-              accept="image/*" 
+              accept="image/*"
+              capture="environment"
               className="hidden" 
             />
           </div>
 
-          <div className="flex gap-4">
-            <button 
-              onClick={() => setImage(null)}
-              disabled={!image || loading}
-              className="flex-1 py-4 rounded-2xl border-2 border-[#5A5A40]/20 font-bold text-[#5A5A40] disabled:opacity-50 hover:bg-[#5A5A40]/5 transition-all"
+          {/* Dual Action Controls: Camera & Upload */}
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => setIsCameraOpen(true)}
+              className="py-3.5 px-4 rounded-2xl bg-white border-2 border-[#5A5A40]/20 hover:border-[#5A5A40] text-[#5A5A40] font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-sm"
             >
-              Reset
+              <Camera size={18} />
+              {t.openCamera}
             </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="py-3.5 px-4 rounded-2xl bg-white border-2 border-[#5A5A40]/20 hover:border-[#5A5A40] text-[#5A5A40] font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-sm"
+            >
+              <Upload size={18} />
+              Browse File
+            </button>
+          </div>
+
+          {/* Analyze CTA */}
+          <div className="flex gap-3">
+            {image && (
+              <button 
+                onClick={() => {
+                  setImage(null);
+                  setResult(null);
+                }}
+                disabled={loading}
+                className="py-4 px-5 rounded-2xl border-2 border-[#5A5A40]/20 font-bold text-xs sm:text-sm text-[#5A5A40] hover:bg-[#5A5A40]/5 transition-all"
+              >
+                Reset
+              </button>
+            )}
             <button 
               onClick={handleAnalyze}
               disabled={!image || loading}
-              className="flex-[2] py-4 rounded-2xl bg-[#5A5A40] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50 hover:bg-[#4A4A30] transition-all shadow-lg shadow-[#5A5A40]/20"
+              className="flex-1 py-4 rounded-2xl bg-[#5A5A40] text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2.5 disabled:opacity-40 hover:bg-[#4A4A30] transition-all shadow-lg shadow-[#5A5A40]/25"
             >
               {loading ? (
                 <>
@@ -116,16 +231,49 @@ export default function DiseaseDetection({ language }: { language: Language }) {
               ) : (
                 <>
                   <ShieldCheck size={20} />
-                  Analyze Now
+                  Analyze Plant Health
                 </>
               )}
             </button>
           </div>
 
+          {/* Quick Sample Selector for immediate demo testing */}
+          <div className="p-4 bg-white rounded-2xl border border-[#5A5A40]/10 space-y-2">
+            <p className="text-[11px] font-bold text-[#5A5A40] uppercase tracking-wider flex items-center gap-1.5">
+              <Leaf size={14} /> {t.orTrySample}
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => loadSample("tomato")}
+                className="p-2 rounded-xl bg-[#5A5A40]/5 hover:bg-[#5A5A40]/10 border border-[#5A5A40]/10 text-center transition-colors"
+              >
+                <span className="block text-base mb-0.5">🍅</span>
+                <span className="text-[10px] font-bold text-[#1A1A1A] truncate block">{t.sampleTomatoBlight}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => loadSample("paddy")}
+                className="p-2 rounded-xl bg-[#5A5A40]/5 hover:bg-[#5A5A40]/10 border border-[#5A5A40]/10 text-center transition-colors"
+              >
+                <span className="block text-base mb-0.5">🌾</span>
+                <span className="text-[10px] font-bold text-[#1A1A1A] truncate block">{t.samplePaddyBlast}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => loadSample("corn")}
+                className="p-2 rounded-xl bg-[#5A5A40]/5 hover:bg-[#5A5A40]/10 border border-[#5A5A40]/10 text-center transition-colors"
+              >
+                <span className="block text-base mb-0.5">🌽</span>
+                <span className="text-[10px] font-bold text-[#1A1A1A] truncate block">{t.sampleCornRust}</span>
+              </button>
+            </div>
+          </div>
+
           {error && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-3 text-red-600 text-sm">
-              <AlertCircle size={18} />
-              {error}
+            <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-3 text-red-600 text-xs sm:text-sm">
+              <AlertCircle size={18} className="shrink-0" />
+              <span>{error}</span>
             </div>
           )}
         </div>
@@ -137,13 +285,15 @@ export default function DiseaseDetection({ language }: { language: Language }) {
               <motion.div 
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="h-full flex flex-col items-center justify-center text-center p-12 bg-white rounded-[2.5rem] border border-[#5A5A40]/10"
+                className="h-full min-h-[380px] flex flex-col items-center justify-center text-center p-8 sm:p-12 bg-white rounded-[2.5rem] border border-[#5A5A40]/10 shadow-sm"
               >
-                <div className="w-16 h-16 bg-[#5A5A40]/5 rounded-full flex items-center justify-center text-[#5A5A40]/40 mb-4">
-                  <Info size={32} />
+                <div className="w-18 h-18 bg-[#5A5A40]/5 rounded-3xl flex items-center justify-center text-[#5A5A40]/40 mb-4">
+                  <Leaf size={36} />
                 </div>
-                <h3 className="font-bold text-[#1A1A1A]/60">No Analysis Yet</h3>
-                <p className="text-sm text-[#1A1A1A]/40 mt-2">Upload an image and click analyze to see results here.</p>
+                <h3 className="font-bold text-lg text-[#1A1A1A]/80">Awaiting Plant Photo</h3>
+                <p className="text-xs sm:text-sm text-[#1A1A1A]/50 mt-2 max-w-xs leading-relaxed">
+                  Open your camera or select an infected leaf photo to generate an instant diagnosis with organic & chemical treatments.
+                </p>
               </motion.div>
             )}
 
@@ -151,16 +301,18 @@ export default function DiseaseDetection({ language }: { language: Language }) {
               <motion.div 
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="h-full flex flex-col items-center justify-center text-center p-12 bg-white rounded-[2.5rem] border border-[#5A5A40]/10"
+                className="h-full min-h-[380px] flex flex-col items-center justify-center text-center p-8 sm:p-12 bg-white rounded-[2.5rem] border border-[#5A5A40]/10 shadow-sm"
               >
                 <div className="relative">
-                  <div className="w-24 h-24 border-4 border-[#5A5A40]/10 border-t-[#5A5A40] rounded-full animate-spin" />
+                  <div className="w-24 h-24 border-4 border-[#5A5A40]/15 border-t-[#5A5A40] rounded-full animate-spin" />
                   <div className="absolute inset-0 flex items-center justify-center text-[#5A5A40]">
                     <Leaf size={32} className="animate-pulse" />
                   </div>
                 </div>
-                <h3 className="font-bold text-[#5A5A40] mt-8 text-xl">Analyzing Crop Health</h3>
-                <p className="text-sm text-[#1A1A1A]/40 mt-2">Our AI is identifying patterns in the leaf structure...</p>
+                <h3 className="font-bold text-[#5A5A40] mt-8 text-xl">Examining Leaf Specimen</h3>
+                <p className="text-xs sm:text-sm text-[#1A1A1A]/50 mt-2 max-w-xs">
+                  Identifying fungal, bacterial, or pest damage patterns and matching agronomy protocols...
+                </p>
               </motion.div>
             )}
 
@@ -171,21 +323,24 @@ export default function DiseaseDetection({ language }: { language: Language }) {
                 className="space-y-6"
               >
                 {/* Main Result Card */}
-                <div className="bg-white p-8 rounded-[2.5rem] border border-[#5A5A40]/10 space-y-6">
-                  <div className="flex items-start justify-between">
+                <div className="bg-white p-6 sm:p-8 rounded-[2.5rem] border border-[#5A5A40]/10 space-y-6 shadow-sm">
+                  <div className="flex items-start justify-between gap-4">
                     <div className="space-y-1">
-                      <p className="text-xs font-bold text-[#5A5A40] uppercase tracking-wider">{t.diseaseName}</p>
-                      <h2 className="text-2xl font-bold text-[#1A1A1A]">{result.diseaseName}</h2>
+                      <p className="text-[10px] font-bold text-[#5A5A40] uppercase tracking-wider">{t.diseaseName}</p>
+                      <h2 className="text-2xl font-bold text-[#1A1A1A] leading-tight">{result.diseaseName}</h2>
                     </div>
-                    <div className={cn("px-4 py-1.5 rounded-full text-xs font-bold border", getSeverityColor(result.severity))}>
+                    <div className={cn("px-3.5 py-1.5 rounded-full text-xs font-bold border shrink-0", getSeverityColor(result.severity))}>
                       {result.severity} Severity
                     </div>
                   </div>
 
                   <div className="flex items-center gap-4 p-4 bg-[#5A5A40]/5 rounded-2xl">
-                    <div className="flex-1 space-y-1">
-                      <p className="text-[10px] font-bold text-[#5A5A40]/60 uppercase tracking-widest">{t.confidence}</p>
-                      <div className="h-2 bg-[#5A5A40]/10 rounded-full overflow-hidden">
+                    <div className="flex-1 space-y-1.5">
+                      <div className="flex justify-between items-center text-[10px] font-bold text-[#5A5A40]/70 uppercase tracking-widest">
+                        <span>{t.confidence}</span>
+                        <span>{Math.round(result.confidence * 100)}% Match</span>
+                      </div>
+                      <div className="h-2.5 bg-[#5A5A40]/15 rounded-full overflow-hidden">
                         <motion.div 
                           initial={{ width: 0 }}
                           animate={{ width: `${result.confidence * 100}%` }}
@@ -193,33 +348,32 @@ export default function DiseaseDetection({ language }: { language: Language }) {
                         />
                       </div>
                     </div>
-                    <span className="font-bold text-[#5A5A40] text-lg">{Math.round(result.confidence * 100)}%</span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2 text-[#5A5A40]">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-2">
+                    <div className="space-y-2.5">
+                      <div className="flex items-center gap-1.5 text-[#5A5A40]">
                         <AlertCircle size={16} />
                         <span className="text-xs font-bold uppercase tracking-wider">{t.symptoms}</span>
                       </div>
-                      <ul className="space-y-2">
+                      <ul className="space-y-1.5">
                         {result.symptoms.map((s, i) => (
-                          <li key={i} className="text-sm text-[#1A1A1A]/60 flex items-start gap-2">
-                            <div className="w-1.5 h-1.5 bg-[#5A5A40]/40 rounded-full mt-1.5 shrink-0" />
+                          <li key={i} className="text-xs sm:text-sm text-[#1A1A1A]/70 flex items-start gap-2 leading-snug">
+                            <div className="w-1.5 h-1.5 bg-[#5A5A40]/60 rounded-full mt-1.5 shrink-0" />
                             {s}
                           </li>
                         ))}
                       </ul>
                     </div>
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2 text-[#5A5A40]">
+                    <div className="space-y-2.5">
+                      <div className="flex items-center gap-1.5 text-[#5A5A40]">
                         <Info size={16} />
                         <span className="text-xs font-bold uppercase tracking-wider">{t.causes}</span>
                       </div>
-                      <ul className="space-y-2">
+                      <ul className="space-y-1.5">
                         {result.causes.map((c, i) => (
-                          <li key={i} className="text-sm text-[#1A1A1A]/60 flex items-start gap-2">
-                            <div className="w-1.5 h-1.5 bg-[#5A5A40]/40 rounded-full mt-1.5 shrink-0" />
+                          <li key={i} className="text-xs sm:text-sm text-[#1A1A1A]/70 flex items-start gap-2 leading-snug">
+                            <div className="w-1.5 h-1.5 bg-[#5A5A40]/60 rounded-full mt-1.5 shrink-0" />
                             {c}
                           </li>
                         ))}
@@ -229,38 +383,41 @@ export default function DiseaseDetection({ language }: { language: Language }) {
                 </div>
 
                 {/* Treatment Card */}
-                <div className="bg-[#5A5A40] text-white p-8 rounded-[2.5rem] space-y-6 shadow-xl shadow-[#5A5A40]/20">
+                <div className="bg-[#5A5A40] text-white p-6 sm:p-8 rounded-[2.5rem] space-y-6 shadow-xl shadow-[#5A5A40]/20">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
-                      <ShieldCheck size={24} />
+                      <ShieldCheck size={22} />
                     </div>
-                    <h3 className="text-xl font-bold">{t.treatment}</h3>
+                    <div>
+                      <h3 className="text-lg sm:text-xl font-bold leading-tight">{t.treatment}</h3>
+                      <p className="text-xs text-white/60">Agronomist Recommended Actions</p>
+                    </div>
                   </div>
 
-                  <div className="space-y-6">
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2 text-white/60">
+                  <div className="space-y-5">
+                    <div className="space-y-2.5">
+                      <div className="flex items-center gap-1.5 text-green-300">
                         <Leaf size={16} />
                         <span className="text-xs font-bold uppercase tracking-wider">{t.organic}</span>
                       </div>
                       <ul className="space-y-2">
                         {result.treatment.organic.map((o, i) => (
-                          <li key={i} className="text-sm text-white/80 flex items-start gap-2">
-                            <CheckCircle2 size={16} className="text-green-400 shrink-0 mt-0.5" />
+                          <li key={i} className="text-xs sm:text-sm text-white/90 flex items-start gap-2 leading-relaxed">
+                            <CheckCircle2 size={16} className="text-green-300 shrink-0 mt-0.5" />
                             {o}
                           </li>
                         ))}
                       </ul>
                     </div>
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2 text-white/60">
+                    <div className="space-y-2.5 pt-2 border-t border-white/10">
+                      <div className="flex items-center gap-1.5 text-blue-300">
                         <FlaskConical size={16} />
                         <span className="text-xs font-bold uppercase tracking-wider">{t.chemical}</span>
                       </div>
                       <ul className="space-y-2">
                         {result.treatment.chemical.map((c, i) => (
-                          <li key={i} className="text-sm text-white/80 flex items-start gap-2">
-                            <CheckCircle2 size={16} className="text-blue-400 shrink-0 mt-0.5" />
+                          <li key={i} className="text-xs sm:text-sm text-white/90 flex items-start gap-2 leading-relaxed">
+                            <CheckCircle2 size={16} className="text-blue-300 shrink-0 mt-0.5" />
                             {c}
                           </li>
                         ))}
@@ -273,6 +430,14 @@ export default function DiseaseDetection({ language }: { language: Language }) {
           </AnimatePresence>
         </div>
       </div>
+
+      {/* Live Camera Modal */}
+      <CameraModal
+        isOpen={isCameraOpen}
+        onClose={() => setIsCameraOpen(false)}
+        onCapture={handleCameraCapture}
+        language={language}
+      />
     </div>
   );
 }

@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { MessageSquare, Send, Loader2, User, Sprout, ChevronRight, Info, Bot, Trash2, Globe } from "lucide-react";
+import { MessageSquare, Send, Loader2, User as UserIcon, Sprout, ChevronRight, Info, Bot, Trash2, Globe } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { getFarmingAdvice } from "../services/gemini";
 import { Language } from "../types";
 import { TRANSLATIONS } from "../constants";
 import { cn } from "../lib/utils";
+import { useAuth } from "../context/AuthContext";
 
 interface Message {
   id: string;
@@ -19,6 +20,7 @@ export default function Chat({ language }: { language: Language }) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { user } = useAuth();
   const t = TRANSLATIONS[language];
 
   const scrollToBottom = () => {
@@ -41,11 +43,16 @@ export default function Chat({ language }: { language: Language }) {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const currentInput = input;
     setInput("");
     setLoading(true);
 
     try {
-      const response = await getFarmingAdvice(input, language);
+      const promptWithContext = user 
+        ? `Farmer Context: Name is ${user.name}, Location: ${user.location}, Primary Crops: ${user.crops.join(", ")}. Question: ${currentInput}`
+        : currentInput;
+
+      const response = await getFarmingAdvice(promptWithContext, language);
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
         text: response,
@@ -132,7 +139,7 @@ export default function Chat({ language }: { language: Language }) {
                 "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm",
                 msg.sender === "user" ? "bg-[#5A5A40] text-white" : "bg-white border border-[#5A5A40]/10 text-[#5A5A40]"
               )}>
-                {msg.sender === "user" ? <User size={20} /> : <Bot size={20} />}
+                {msg.sender === "user" ? <UserIcon size={20} /> : <Bot size={20} />}
               </div>
               <div className={cn(
                 "p-5 rounded-[1.5rem] shadow-sm",

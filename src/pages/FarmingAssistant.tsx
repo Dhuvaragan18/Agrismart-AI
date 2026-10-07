@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { MapPin, Calendar, Sprout, Loader2, ChevronRight, Droplets, Sun, Thermometer, Info, CheckCircle2, Leaf, Shovel, Wheat } from "lucide-react";
 import ReactMarkdown from "react-markdown";
@@ -6,13 +6,21 @@ import { getSmartFarmingPlan } from "../services/gemini";
 import { Language } from "../types";
 import { TRANSLATIONS, MONTHS } from "../constants";
 import { cn } from "../lib/utils";
+import { useAuth } from "../context/AuthContext";
 
 export default function FarmingAssistant({ language }: { language: Language }) {
-  const [location, setLocation] = useState("");
+  const { user } = useAuth();
+  const [location, setLocation] = useState(user?.location || "Coimbatore, Tamil Nadu");
   const [month, setMonth] = useState(MONTHS[new Date().getMonth()]);
   const [loading, setLoading] = useState(false);
   const [plan, setPlan] = useState<string | null>(null);
   const t = TRANSLATIONS[language];
+
+  useEffect(() => {
+    if (user?.location && !location) {
+      setLocation(user.location);
+    }
+  }, [user]);
 
   const handleGetPlan = async (e: React.FormEvent) => {
     e.preventDefault();
